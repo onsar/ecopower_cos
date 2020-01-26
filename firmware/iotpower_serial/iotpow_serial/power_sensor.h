@@ -73,6 +73,11 @@ analog_input v1={MAME_PWR_7,ENTER_7,CURRENT_CONST_7,0,0};
 
 analog_input analog_inputs[]={p1,p2,p3,p4,p5,p6,v1};
 
+const unsigned int samples = 160;
+unsigned long timeSample[samples];
+unsigned int valueSample[samples];
+
+
 
 // Function Prototypes
 void calculate_power();
@@ -121,6 +126,21 @@ void buildPowerMessage(uint8_t output){
     }
   }
   if(DEBUG){Serial.println(millis()-millis_init);}
+}
+
+
+power_sensor_init(){
+  for(int n=0; n<samples; n++){
+    timeSample[n]=10;
+    valueSample[n]=10;
+  }
+}
+
+
+
+
+void saveVValues(){
+  Serial.print ("name_input: ");
 }
 
 #endif

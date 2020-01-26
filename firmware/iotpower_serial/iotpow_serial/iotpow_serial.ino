@@ -48,6 +48,7 @@ uint32_t t_last_measurement=0;
 void setup(void){     
   Serial.begin(BPS);
   wifiSerialInit.begin(BPS);
+  power_sensor_init();
 }
 
 void loop(void){
@@ -73,6 +74,7 @@ void loop(void){
   if (current_time - t_last_measurement > 200){     
     t_last_measurement = current_time;
     calculate_power();
+    saveVValues();
     }
   }
   
