@@ -27,23 +27,26 @@
 
  /*
  * diagrama de estados del servidor
- * ===============================
-
- * estado = 0 inicio de la comunicacion       (sensores?)               B0   55   An  
- * estado = 1 confirmacion, cliente preparado (siguente registro)       B1   An   r1  
- * estado = 2 recepción de registros          (siguente registro)       B1   r1   r2
- *                                            (siguente registro)       B1   r2   r3
- *                                            (siguente registro)       B1   r3   rn
- *                                            (suma de registros)       B1   rn   suma
- * estado = 3 comprabar la trama recibida     (final de comunicacion)   B8   suma 55
- *                                                              
+ * ================================
+ * 
+ * estado = 0 inicio de la comunicacion       (inicio STX     02)       02   06   r1
+ * 
+ * estado = 2 recepción de registros          (siguente registro)       12   r1   r2
+ *                                            (siguente registro)       12   r2   rn
+ *                                            (Line Feed \n   0A)       12   rn   00
+ *                                            (suma de registros)       12   00   suma
+ *                                            
+ * estado = 3 comprabar la trama recibida     (Final  ETX     03)       03   suma 06(ACK)
+ *
  * estado = 4 procesando y transmision de valores
- *            primer valor el de menor peso           registros_recibidos[0]
- *            segundo valor recibido el de mas peso   registros_recibidos[1]
- * Estado = 5 Reinicio y espera entre comuniaciones                     B8   ??   55
+ * 
+ * estado = 5 Reset: Final del texto
+ * 
+ * estado = 6 espera entre comuniaciones
+ * 
  */
 
-#define DEBUG 1
+#define DEBUG 0
 
 #include <SPI.h>
 
@@ -94,12 +97,8 @@ void loop() {
 uint8_t readRegister(uint8_t b, int e) { // b=byte a transmitir e= esclavo
   
   uint8_t result = 0;
-  // digitalWrite(esclavos_[e]->pin_seleccion, LOW);
-  // delay(10);
+  delay(1);
   result = SPI.transfer(b); // (unsigned int)
-  // delay(10);
-  // digitalWrite(esclavos_[e]->pin_seleccion, HIGH);
-  // delay(5);
   return (result);
 }
 
@@ -233,7 +232,7 @@ void spi_loop(){
     if(registros_pendientes > 0){  
       uint8_t registro_leido = readRegister(0x12, posicion_esclavo);
       uint8_t registro_orden = registros_esclavo - registros_pendientes;
-      if(registro_leido == 0x0A){
+      if(registro_leido == 0x00){
           estado = 3;
       }
       else estado = 2;
@@ -276,18 +275,18 @@ void spi_loop(){
 
   if(estado == 4){  //procesando y transmision de valores
     estado=5;
-    if(DEBUG) {
+    if(1) {
       Serial.print("Estado 4 -> Estado: "); Serial.println(estado); 
       Serial.print("cadena: ");Serial.println(registros_recibidos);     
     }   
     return; 
 
   } 
-  if(estado == 5){  //procesando y transmision de valores
+  if(estado == 5){  //Reset: final de texto
     estado=6;
     uint8_t registro_leido = readRegister(0x03, posicion_esclavo);
     if(DEBUG) {
-      Serial.println("Estado: "); Serial.print(estado);   
+      Serial.print("Estado: "); Serial.println(estado);   
     } 
   }
  
