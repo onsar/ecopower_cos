@@ -1,42 +1,14 @@
 // Slave
 
 
-/*
- * Descubrimiento de esclavos
- * ===============================
-
- * estado = 0 inicio de la comunicacion       (sensores?)               B0   55   An  
- * estado = 1 confirmacion esclavo preparado  (final de comunicacion)   B8   An   55  
- * estado = 2 comprobacion, final de comunicacion                       B8   55   55
- * estado = 3 espera entre comuniaciones                                                            
- */
-
-
- /*
- * diagrama de estados del servidor
- * ===============================
-
- * estado = 0 inicio de la comunicacion       (sensores?)               B0   55   An  
- * estado = 1 confirmacion, cliente preparado (siguente registro)       B1   An   r1  
- * estado = 2 recepción de registros          (siguente registro)       B1   r1   r2
- *                                            (siguente registro)       B1   r2   r3
- *                                            (siguente registro)       B1   r3   rn
- *                                            (suma de registros)       B1   rn   suma
- * estado = 3 comprabar la trama recibida     (final de comunicacion)   B8   suma 55
- *                                                              
- * estado = 4 procesando y transmision de valores
- *            primer valor el de menor peso           registros_recibidos[0]
- *            segundo valor recibido el de mas peso   registros_recibidos[1]
- * Estado = 5 espera entre comuniaciones
- */
  
 #define DEBUG 1
 
-#define DATOS 0x06
+#define DATOS 0x07
 
 #include <SPI.h>
 
-uint8_t datos_matrix[] = {0xC1,0xC2,0xC3,0xC4,0xC5,0xC6};
+char datos_matrix[] = {'h','o','l','a',':','3',0x0A};
 uint8_t datos_pendientes;
 
 uint32_t t_last_tx;
@@ -102,26 +74,69 @@ ISR (SPI_STC_vect){
     }
   }
 
+
+  if(c==0x02){ // inicio  
+    datos_pendientes = DATOS;
+    
+    if(datos_pendientes > 0) {
+      SPDR = datos_matrix[DATOS - datos_pendientes];  // 4-4=0, 4-3=1, 4-2=2, 4-1=3,
+      datos_pendientes = datos_pendientes-1;
+      if(DEBUG) {
+        Serial.print("bit recibido =  "); Serial.println(c,HEX);
+        Serial.print("datos_pendientes =  "); Serial.println(datos_pendientes);
+      }
+    }
+
+    else{
+      uint8_t registros_suma  = sumar_registros();
+      SPDR = registros_suma;
+      datos_pendientes = 0;
+      if(DEBUG) {
+        Serial.print("bit recibido =  "); Serial.println(c,HEX);
+        Serial.print("registros_suma:  ");Serial.println(registros_suma,HEX);
+      }
+    }
+  }
+
+  if(c==0x03){ // reset   
+    SPDR = 0x06;
+    datos_pendientes = 0;
+    if(DEBUG) {
+      Serial.print("bit recibido =  "); Serial.println(c,HEX);
+      Serial.println(" ***reset  ");
+    }
+  }
+
+  if(c==0x12){// transmision iniciada
+    
+    if(datos_pendientes > 0) {
+      SPDR = datos_matrix[DATOS - datos_pendientes];  // 4-4=0, 4-3=1, 4-2=2, 4-1=3,
+      datos_pendientes = datos_pendientes-1;
+      if(DEBUG) {
+        Serial.print("bit recibido =  "); Serial.println(c,HEX);
+        Serial.print("datos_pendientes =  "); Serial.println(datos_pendientes);
+      }
+    }
+    else{
+      uint8_t registros_suma  = sumar_registros();
+      SPDR = registros_suma;
+      datos_pendientes = 0;
+      if(DEBUG) {
+        Serial.print("bit recibido =  "); Serial.println(c,HEX);
+        Serial.print("registros_suma:  ");Serial.println(registros_suma,HEX);
+      }
+    }  
+  }
+
+
+    
 }  // end of interrupt service routine (ISR) SPI_STC_vect
 
 
 
 
-void loop (void)
-{
-  /*
-  uint32_t current_time= millis();
-     
-  if ((current_time - t_last_tx) > 10000)
-    {      
-      Serial.print(F("current_time - sgs: ")); Serial.println(millis() / 1000);
-      t_last_tx = current_time;    
-      datos_tx = DATOS;
-      SPDR = 0xF0 | DATOS;
-    }
+void loop (void){
 
-
-*/
 }  // end of loop
 
 uint8_t sumar_registros(){
@@ -132,6 +147,7 @@ uint8_t sumar_registros(){
   Serial.print("suma: "); Serial.println(suma,HEX);
   return suma;
 }
+
 
 
   

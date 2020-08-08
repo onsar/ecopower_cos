@@ -68,7 +68,7 @@ int numero_esclavos;              // esclavos reales conectados
 int posicion_esclavo;             // posicion del esclavo seleccionado
 
 // control de los registros
-uint8_t registros_recibidos[14];  // matriz para almacenar los registros recibidos
+char registros_recibidos[14];     // matriz para almacenar los registros recibidos
 uint8_t registros_esclavo;        // numero de registros del dispositivo slave (recibido)
 uint8_t registros_pendientes;     // registros pendientes de recibir desde el esclavo
 uint8_t registros_suma;           // suma de los registros recibidos para comprobar
@@ -136,14 +136,14 @@ void spi_setup(){
     uint8_t registro_leido = 0x00; 
     reset_seleccion_esclavo();
     digitalWrite(esclavos_[n]->pin_seleccion, LOW); 
-    delay(10);
+    delay(50);
 
     registro_leido = readRegister(0xB0, n);
     if(DEBUG) {
       Serial.print("inicio descubrimiento, B0 registro: "); 
       Serial.println(registro_leido, HEX);
     }
-
+    delay(10);
     registro_leido = readRegister(0xB8, n);
     if(((registro_leido & 0xF0) == 0xA0)&&((registro_leido & 0x0F) >= 2)){
       esclavos_[n]->numero_sensores = registro_leido & 0x0F; 
@@ -159,7 +159,7 @@ void spi_setup(){
       }
       break;
     }
-    
+    delay(10);
     registro_leido = readRegister(0xB8, n);
     if(DEBUG){
       Serial.print("reset esclavo, B8 registro_leido: "); 
@@ -206,7 +206,7 @@ void spi_loop(){
     // configuracion inicial de los registros
     registros_esclavo = 0;
     for(int n=0; n<14; n++){registros_recibidos[n] = 0x00;}   
-    registros_pendientes = 0;
+    registros_pendientes = 14;
     registros_suma = 0;
 
     if(DEBUG){
@@ -219,45 +219,28 @@ void spi_loop(){
 
   if(estado == 0){  //inicio de la comunicacion
     uint8_t registro_leido = 0x00;
-    registro_leido = readRegister(0xB0, posicion_esclavo); 
+    registro_leido = readRegister(0x02, posicion_esclavo); 
+    registros_esclavo =14;
     
-    estado = 1;  
-    if(DEBUG) {Serial.print("Estado 0 -> Estado 1: "); Serial.println(registro_leido, HEX);}
+    estado = 2;  
+    if(DEBUG) {Serial.print(registro_leido, HEX);Serial.print("  Estado 0 -> Estado "); Serial.println(estado);}
     // delay(10);
-    return;
-  } 
-  
-  if(estado == 1){  // confirmacion
-
-    uint8_t registro_leido = 0x00;
-    registro_leido = readRegister(0xB1, posicion_esclavo); 
-
-    // uint8_t registro_leido = 0x00;
-    // registro_leido = SPI.transfer(0xB1);                          // inicio de la comunicacion
-    if(((registro_leido & 0xF0) == 0xA0)&&((registro_leido & 0x0F) >= 2)){   
-      registros_esclavo = registro_leido & 0x0F;
-      registros_pendientes = registros_esclavo;  
-      estado = 2;      
-    }       
-    else{
-      estado = 5;
-    }
-    if(DEBUG){
-      Serial.print("Estado 1 -> Estado: "); Serial.print(estado);
-      Serial.print("  registro: ");Serial.println((registro_leido), HEX);     
-    }
     return;
   } 
   
   if(estado == 2){  //recepcion de registros
     
-    if(registros_pendientes > 0){    
-      uint8_t registro_leido = readRegister(0xB1, posicion_esclavo);
+    if(registros_pendientes > 0){  
+      uint8_t registro_leido = readRegister(0x12, posicion_esclavo);
       uint8_t registro_orden = registros_esclavo - registros_pendientes;
+      if(registro_leido == 0x0A){
+          estado = 3;
+      }
+      else estado = 2;
       registros_recibidos[registro_orden] = registro_leido;    
       registros_pendientes = registros_pendientes-1;
       registros_suma = registros_suma + registro_leido;
-      estado = 2;
+      
       if(DEBUG){
         Serial.print("iniciada, registros_recibidos[]: "); Serial.print(registro_orden);
         Serial.print("  registro: "); Serial.println(registro_leido,HEX);
@@ -265,15 +248,15 @@ void spi_loop(){
       }
     } 
     else {
-      estado = 3;
-      if(DEBUG) {Serial.print("Estado 2 -> Estado 3: "); Serial.println("registros_pendientes = 0");}
+      estado = 5;
+      if(DEBUG) {Serial.print("Estado 2 -> Estado "); Serial.println(estado);}
     }
     return;
   }
 
   if(estado == 3){  //comprabar la trama recibida con final de trama: registros_suma
     
-    uint8_t registro_leido = readRegister(0xB8, posicion_esclavo);
+    uint8_t registro_leido = readRegister(0x03, posicion_esclavo);
     if(registro_leido == registros_suma){
       estado = 4;
       if(DEBUG) {
@@ -290,61 +273,22 @@ void spi_loop(){
     }
     return;
   }
-  
-/* GESTION DE LA TX DE REGISTROS
- *  
- * recepcion : |   D1  |   D2  |   D3  |   D4  |
- * registros[]:|   0   |   1   |   2   |   3   |
- * valores     | p11-h | p11-l | p12-h | p12-l |
- * exadecimal  |     D1D2      |     D3D4      | 
- * decimal     |     53714     |     54228     |
- * 
-*/
-  
+
   if(estado == 4){  //procesando y transmision de valores
-    
-    uint16_t valor_t = 0;
-    uint16_t valor_l = 0;
-    uint16_t valor_h = 0;
-    for(uint8_t n=0; n < registros_esclavo; n=n+2){
-      valor_l = uint16_t(registros_recibidos[n+1]);
-      valor_h = uint16_t(registros_recibidos[n]);
-      valor_h = valor_h << 8;
-      valor_t = valor_l | valor_h;
-      String nombre_sensor = (esclavos_[posicion_esclavo]->nombres_sesores[n/2]);
-      transmision(nombre_sensor +":"+ String(int(valor_t))); 
-      // transmision(esclavos_[posicion_esclavo]->nombres_sesores[n/2]+":"+ String(int(valor_t)));    
-    }
     estado=5;
+    if(DEBUG) {
+      Serial.print("Estado 4 -> Estado: "); Serial.println(estado); 
+      Serial.print("cadena: ");Serial.println(registros_recibidos);     
+    }   
     return; 
 
-
+  } 
   if(estado == 5){  //procesando y transmision de valores
-    uint8_t registro_leido = readRegister(0xB8, posicion_esclavo);
+    estado=6;
+    uint8_t registro_leido = readRegister(0x03, posicion_esclavo);
     if(DEBUG) {
-      Serial.print("Estado: "); Serial.print(estado); 
-      Serial.print("  registro_leido: ");Serial.println((registro_leido), HEX);     
+      Serial.println("Estado: "); Serial.print(estado);   
     } 
   }
-} //fin spi_loop  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-}
+ 
+}//fin spi_loop 
