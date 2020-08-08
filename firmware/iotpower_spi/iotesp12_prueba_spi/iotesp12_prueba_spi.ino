@@ -40,7 +40,7 @@
  * estado = 4 procesando y transmision de valores
  *            primer valor el de menor peso           registros_recibidos[0]
  *            segundo valor recibido el de mas peso   registros_recibidos[1]
- * Estado = 5 espera entre comuniaciones
+ * Estado = 5 Reinicio y espera entre comuniaciones                     B8   ??   55
  */
 
 #define DEBUG 1
@@ -94,12 +94,12 @@ void loop() {
 uint8_t readRegister(uint8_t b, int e) { // b=byte a transmitir e= esclavo
   
   uint8_t result = 0;
-  digitalWrite(esclavos_[e]->pin_seleccion, LOW);
-  delay(10);
+  // digitalWrite(esclavos_[e]->pin_seleccion, LOW);
+  // delay(10);
   result = SPI.transfer(b); // (unsigned int)
-  delay(10);
-  digitalWrite(esclavos_[e]->pin_seleccion, HIGH);
-  delay(5);
+  // delay(10);
+  // digitalWrite(esclavos_[e]->pin_seleccion, HIGH);
+  // delay(5);
   return (result);
 }
 
@@ -134,6 +134,9 @@ void spi_setup(){
   
   for(int n= 0; n < max_esclavos; n++){  
     uint8_t registro_leido = 0x00; 
+    reset_seleccion_esclavo();
+    digitalWrite(esclavos_[n]->pin_seleccion, LOW); 
+    delay(10);
 
     registro_leido = readRegister(0xB0, n);
     if(DEBUG) {
@@ -192,7 +195,10 @@ void spi_loop(){
 
     // Un esclavo cada vez
     posicion_esclavo++;                              
-    if ( posicion_esclavo > (numero_esclavos-1)) {posicion_esclavo=0;}  
+    if ( posicion_esclavo > (numero_esclavos-1)) {posicion_esclavo=0;} 
+    reset_seleccion_esclavo();
+    digitalWrite(esclavos_[posicion_esclavo]->pin_seleccion, LOW); 
+    delay(10);
 
     // inicio de los estados
     estado = 0;
@@ -214,8 +220,6 @@ void spi_loop(){
   if(estado == 0){  //inicio de la comunicacion
     uint8_t registro_leido = 0x00;
     registro_leido = readRegister(0xB0, posicion_esclavo); 
-    // digitalWrite(esclavos_[posicion_esclavo]->pin_seleccion, LOW); delay(10);    // seleccion de esclavo
-    // registro_leido = SPI.transfer(0xB0);                          // inicio de la comunicacion
     
     estado = 1;  
     if(DEBUG) {Serial.print("Estado 0 -> Estado 1: "); Serial.println(registro_leido, HEX);}
@@ -312,8 +316,17 @@ void spi_loop(){
       // transmision(esclavos_[posicion_esclavo]->nombres_sesores[n/2]+":"+ String(int(valor_t)));    
     }
     estado=5;
-    return;       
-  } //fin spi_loop  
+    return; 
+
+
+  if(estado == 5){  //procesando y transmision de valores
+    uint8_t registro_leido = readRegister(0xB8, posicion_esclavo);
+    if(DEBUG) {
+      Serial.print("Estado: "); Serial.print(estado); 
+      Serial.print("  registro_leido: ");Serial.println((registro_leido), HEX);     
+    } 
+  }
+} //fin spi_loop  
   
   
   
