@@ -122,38 +122,16 @@ void spi_setup(){
     uint8_t registro_leido = 0x00; 
     reset_seleccion_esclavo();
     digitalWrite(spiPin[n], LOW); 
+    if(DEBUG) {Serial.print("seleccion esclavo: "); Serial.println(n);}
     delay(50);
 
-    registro_leido = readRegister(0xB0);
-    if(DEBUG) {
-      Serial.print("inicio descubrimiento, B0 registro: "); 
-      Serial.println(registro_leido, HEX);
-    }
+    registro_leido = readRegister(0x03);
+    if(DEBUG) {Serial.print("inicio descubrimiento, 03 registro: "); Serial.println(registro_leido, HEX);}
     delay(10);
-    registro_leido = readRegister(0xB8);
-    if(DEBUG){
-      Serial.print("esclavo preparado, B8 registro: "); 
-      Serial.println(registro_leido, HEX);
-    }
-    else{
-      if(DEBUG){
-        Serial.print("esclavo NO-preparado, registro_leido: "); 
-        Serial.println(registro_leido, HEX);
-      }
-      break;
-    }
-    delay(10);
-    registro_leido = readRegister(0xB8);
-    if(DEBUG){
-      Serial.print("reset esclavo, B8 registro_leido: "); 
-      Serial.println(registro_leido, HEX);
-    }
-    if (registro_leido == 0x55){
-      numero_esclavos = n+1;  
-    }
-    else{
-      break; 
-    }
+    registro_leido = readRegister(0x03);
+    if(DEBUG) {Serial.print("descubrimiento, 03 registro: "); Serial.println(registro_leido, HEX);}
+    if (registro_leido == 0x06){ numero_esclavos = n+1; }
+    else{break;}
   }
 
   Serial.print("ESCALVOS DETECTADOS: ");  Serial.println(numero_esclavos);
