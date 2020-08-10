@@ -25,9 +25,12 @@
  */
 
 
- /*
+/*
  * diagrama de estados del servidor
  * ================================
+ * 
+ * 
+ * estado = 0 datos NO preparados                                       02   15
  * 
  * estado = 0 inicio de la comunicacion       (inicio STX     02)       02   06   r1
  * 
@@ -36,7 +39,7 @@
  *                                            (Line Feed \n   0A)       12   rn   00
  *                                            (suma de registros)       12   00   suma
  *                                            
- * estado = 3 comprabar la trama recibida     (Final  ETX     03)       03   suma 06(ACK)
+ * estado = 3 comprabar la trama recibida     (Final  ETX     03)       03   suma 15(NACK)
  *
  * estado = 4 procesando y transmision de valores
  * 
@@ -44,9 +47,11 @@
  * 
  * estado = 6 espera entre comuniaciones
  * 
- */
+ * CAN 0x18    Cancel: Error en el procesados
+*/
+ 
 
-#define DEBUG 1
+#define DEBUG 0
 
 #define REGISTROS_MAX 14
 
@@ -115,7 +120,7 @@ void spi_setup(){
     delay(10);
     registro_leido = readRegister(0x03);
     if(DEBUG) {Serial.print("descubrimiento, 03 registro: "); Serial.println(registro_leido, HEX);}
-    if (registro_leido == 0x06) numero_esclavos = n+1;
+    if (registro_leido == 0x15) numero_esclavos = n+1;
     else break;
   }
 
@@ -132,7 +137,7 @@ void spi_loop(){
   // EJECUCION EN BASE A TIEMPOS
   uint32_t current_time= millis();  
   if (current_time < t_last_tx) t_last_tx=0;         // para el desbordamiento de millis()
-  if (current_time - t_last_tx > 10000){             // inicio de la lectura del esclavo
+  if (current_time - t_last_tx > 5000){             // inicio de la lectura del esclavo
     t_last_tx = current_time;
 
     // Un esclavo cada vez
@@ -176,6 +181,7 @@ uint8_t readRegister(uint8_t b) { // b=byte a transmitir e= esclavo
   uint8_t result = 0;
   delayMicroseconds(120);
   result = SPI.transfer(b); // (unsigned int)
+  if(DEBUG){Serial.print("bitTx: ");  Serial.println(b,HEX);}  
   return (result);
 }
 
@@ -194,18 +200,24 @@ void rcepcion_de_datos(){
   switch (estado) {
     case 0 : //inicio de la comunicacion
       registro_leido = readRegister(0x02); 
-      estado = 2;  
+
+      if(registro_leido == 0x06) estado = 2;
+      else                       estado = 6;
+ 
       if(DEBUG) {Serial.print(registro_leido, HEX);Serial.print("  Estado 0 -> Estado "); Serial.println(estado);}
       break;
+      
     case 2: //recepción de registros
       if(registros_pendientes > 0){  
         registro_leido = readRegister(0x12);
         registro_orden = registros_esclavo - registros_pendientes;
+        registros_recibidos[registro_orden] = registro_leido;
+        registros_suma = registros_suma + registro_leido;            
+        registros_pendientes--;
+
         if(registro_leido == 0x00) estado = 3;
         else                       estado = 2;
-        registros_recibidos[registro_orden] = registro_leido;    
-        registros_pendientes = registros_pendientes-1;
-        registros_suma = registros_suma + registro_leido;
+        
         if(DEBUG){
           Serial.print("iniciada, registros_recibidos[]: "); Serial.print(registro_orden);
           Serial.print("  registro: "); Serial.println(registro_leido,HEX);
@@ -214,9 +226,13 @@ void rcepcion_de_datos(){
       } 
       else {
         estado = 5;
-        if(DEBUG) {Serial.print("Estado 2 -> Estado "); Serial.println(estado);}
+        if(DEBUG) {
+          Serial.print("Estado 2 -> Estado "); Serial.println(estado);
+          Serial.println("superada la longitud maxima de la cadena");
+        }
       }
       break;
+      
     case 3: //comprabar la trama recibida
       registro_leido = readRegister(0x03);
       if(registro_leido == registros_suma){
@@ -234,18 +250,21 @@ void rcepcion_de_datos(){
         }
       } 
       break;
+      
     case 4: //procesando y transmision de valores
       transmision(registros_recibidos);
-      estado=5;
+      estado=6;
       if(DEBUG) {
         Serial.print("Estado 4 -> Estado: "); Serial.println(estado); 
         Serial.print("cadena: ");Serial.println(registros_recibidos);     
       }   
       break; 
+      
     case 5:
       estado=6;
       registro_leido = readRegister(0x03);
       if(DEBUG) {Serial.print("Estado: "); Serial.println(estado);}
       break; 
+      
   }//fin case
 }// fin recepcion_de_datos
