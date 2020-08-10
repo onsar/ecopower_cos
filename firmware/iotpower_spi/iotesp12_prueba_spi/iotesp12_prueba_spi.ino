@@ -60,7 +60,6 @@ int posicion_esclavo;             // orden del esclavo seleccionado
 
 // control de los registros
 char registros_recibidos[REGISTROS_MAX];    // matriz para almacenar los registros recibidos
-uint8_t registros_esclavo;                  // numero de registros del dispositivo slave (recibido)
 uint8_t registros_pendientes;               // registros pendientes de recibir desde el esclavo
 uint8_t registros_suma;                     // suma de los registros recibidos para comprobar
 
@@ -70,6 +69,12 @@ uint32_t t_last_tx;               // tiempo de la ultima transmision de datos
 // Cotrol del estado
 uint8_t estado;
 
+
+// FUNCIONES
+void reset_seleccion_esclavo();
+uint8_t readRegister(uint8_t b);
+void transmision(String this_string);
+void rcepcion_de_datos();
 
 
 void setup() {
@@ -81,31 +86,9 @@ void loop() {
   spi_loop();
 }
 
-// FUNCIONES
-
-void reset_seleccion_esclavo(){
-  for(int n= 0; n < max_esclavos; n++){
-    digitalWrite(spiPin[n], HIGH); 
-  }   
-}
-
-uint8_t readRegister(uint8_t b) { // b=byte a transmitir e= esclavo
-  uint8_t result = 0;
-  delay(1);
-  result = SPI.transfer(b); // (unsigned int)
-  return (result);
-}
-
-void transmision(String this_string){
-  Serial.print("valor a transmitir: ");
-  Serial.println(this_string);
-}
-
-
 void spi_setup(){
   
   SPI.begin();
-
   SPI.setClockDivider(SPI_CLOCK_DIV8);  // 2 MHz
 
   // configuracion pines de selección (SS) a 5V
@@ -141,7 +124,6 @@ void spi_setup(){
   // CONFIGURACION DE LAS VARIABLES INICIALES
   posicion_esclavo = numero_esclavos; // Se iniciará con el esclavo 0
   t_last_tx=0;
-  estado = 5;   
 }
 
 
@@ -158,13 +140,11 @@ void spi_loop(){
     if ( posicion_esclavo > (numero_esclavos-1)) {posicion_esclavo=0;} 
     reset_seleccion_esclavo();
     digitalWrite(spiPin[posicion_esclavo], LOW); 
-    // delay(10); No es necesario porque hay poeraciones antes de la primera lectura
 
     // inicio de los estados
     estado = 0;
 
-    for(int n=0; n<REGISTROS_MAX; n++){registros_recibidos[n] = 0x00;}   
-    registros_esclavo =REGISTROS_MAX;    
+    for(int n=0; n<REGISTROS_MAX; n++){registros_recibidos[n] = 0x00;}      
     registros_pendientes = REGISTROS_MAX;
     registros_suma = 0;
 
@@ -174,19 +154,49 @@ void spi_loop(){
       Serial.print("freeHeap: "); Serial.println(ESP.getFreeHeap()); 
       Serial.print("esclavo: ");  Serial.println(posicion_esclavo);  
     } 
-  }
+ 
 
   // EJECUCION DE ESTADOS DE LECTURA
+  while (estado != 6) {rcepcion_de_datos();}
   
+  digitalWrite(spiPin[posicion_esclavo], HIGH);
+  
+ }// fin t_last_tx
+}//fin spi_loop 
+
+
+
+void reset_seleccion_esclavo(){
+  for(int n= 0; n < max_esclavos; n++){
+    digitalWrite(spiPin[n], HIGH); 
+  }   
+}
+
+uint8_t readRegister(uint8_t b) { // b=byte a transmitir e= esclavo
+  uint8_t result = 0;
+  delayMicroseconds(120);
+  result = SPI.transfer(b); // (unsigned int)
+  return (result);
+}
+
+void transmision(String this_string){
+  Serial.print("valor a transmitir: ");
+  Serial.println(this_string);
+}
+
+
+void rcepcion_de_datos(){
+  uint8_t registros_esclavo = REGISTROS_MAX;   // numero de registros del dispositivo slave (recibido)
+  uint8_t registro_orden;                      // posicion del string
   uint8_t registro_leido=0x00;
-  uint8_t registro_orden;
-  
+
+
   switch (estado) {
     case 0 : //inicio de la comunicacion
       registro_leido = readRegister(0x02); 
       estado = 2;  
       if(DEBUG) {Serial.print(registro_leido, HEX);Serial.print("  Estado 0 -> Estado "); Serial.println(estado);}
-      return;
+      break;
     case 2: //recepción de registros
       if(registros_pendientes > 0){  
         registro_leido = readRegister(0x12);
@@ -206,7 +216,7 @@ void spi_loop(){
         estado = 5;
         if(DEBUG) {Serial.print("Estado 2 -> Estado "); Serial.println(estado);}
       }
-      return;
+      break;
     case 3: //comprabar la trama recibida
       registro_leido = readRegister(0x03);
       if(registro_leido == registros_suma){
@@ -223,7 +233,7 @@ void spi_loop(){
             Serial.print("  registro_leido: ");Serial.println((registro_leido), HEX);     
         }
       } 
-      return;
+      break;
     case 4: //procesando y transmision de valores
       transmision(registros_recibidos);
       estado=5;
@@ -231,13 +241,11 @@ void spi_loop(){
         Serial.print("Estado 4 -> Estado: "); Serial.println(estado); 
         Serial.print("cadena: ");Serial.println(registros_recibidos);     
       }   
-      return; 
+      break; 
     case 5:
       estado=6;
       registro_leido = readRegister(0x03);
-      digitalWrite(spiPin[posicion_esclavo], HIGH);
       if(DEBUG) {Serial.print("Estado: "); Serial.println(estado);}
       break; 
   }//fin case
-  
-}//fin spi_loop 
+}// fin recepcion_de_datos

@@ -20,13 +20,9 @@
  * estado = 6 espera entre comuniaciones
 */
  
-#define DEBUG 0
-
-#define DATOS 0x07
+#define DEBUG 1
 
 #include <SPI.h>
-
-// char datos_matrix[] = {'h','o','l','a',':','3',0x0A};
 
 char datos_matrix[]= "hola:3";
 
@@ -34,11 +30,9 @@ int8_t data_leng;
 
 int8_t datos_pendientes;
 
-uint32_t t_last_tx;
-
 void setup (void)
 {
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   pinMode(MISO, OUTPUT);
 
@@ -59,7 +53,6 @@ ISR (SPI_STC_vect){
 
   byte c = SPDR;
   data_leng = sizeof(datos_matrix) / sizeof(datos_matrix[0]);
-  
   if(c==0xB0){ // inicio  
     datos_pendientes = data_leng;
     SPDR = 0xA0 | data_leng;
@@ -161,8 +154,6 @@ ISR (SPI_STC_vect){
     }  
   }
 
-
-    
 }  // end of interrupt service routine (ISR) SPI_STC_vect
 
 
